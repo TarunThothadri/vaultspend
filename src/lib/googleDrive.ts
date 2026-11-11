@@ -11,6 +11,7 @@ const FILE = 'expenses.json';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file openid email profile';
 let accessToken = '';
 let tokenExpiresAt = 0;
+let pendingTokenRequest: Promise<string> | null = null;
 
 export function getSavedUser(): GoogleUser | null {
   const raw = localStorage.getItem('vaultspend_user');
@@ -21,6 +22,7 @@ export function signOutLocal() {
   localStorage.removeItem('vaultspend_user');
   accessToken = '';
   tokenExpiresAt = 0;
+  pendingTokenRequest = null;
 }
 
 async function requestGoogleAccessToken(): Promise<string> {
@@ -65,10 +67,12 @@ function waitForGoogle(): Promise<void> {
 
 async function ensureToken(): Promise<string> {
   if (accessToken && Date.now() < tokenExpiresAt) return accessToken;
-  // The GIS token model does not persist access tokens across page reloads.
-  // Re-request one when the user explicitly starts a Drive operation. Since
-  // prompt is empty, an already-approved user is not asked to consent again.
-  return requestGoogleAccessToken();
+  // GIS access tokens are memory-only. Re-acquire one when Drive is needed;
+  // share an in-flight request so React StrictMode cannot open duplicate popups.
+  if (!pendingTokenRequest) {
+    pendingTokenRequest = requestGoogleAccessToken().finally(() => { pendingTokenRequest = null; });
+  }
+  return pendingTokenRequest;
 }
 
 async function api(url: string, init: RequestInit = {}) {

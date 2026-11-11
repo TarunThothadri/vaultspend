@@ -50,3 +50,15 @@ The first worksheet is read. Required columns: `Date`, `Expense`; recommended co
 ## Google Drive backup fixes
 
 The Drive integration now creates `expenses.json` with its `parents` folder metadata only on the initial create request. When updating an existing backup, it omits `parents`, as required by Drive API v3. OAuth token requests use an empty `prompt` value so Google requests consent on first authorization rather than forcing the consent screen every time. Because Google Identity Services access tokens are short-lived and held in memory, the app obtains a fresh token when the user clicks Backup after a reload or token expiry; an already-granted scope should not require consent again.
+
+
+### Automatic Google Drive restore
+
+After Google sign-in, VaultSpend checks the current browser's local vault. If it
+contains expenses, those local expenses are loaded and are not overwritten. If
+the local vault is empty or missing, the app automatically attempts to restore
+`ExpenseTracker_Backup/expenses.json` from Google Drive. Excel/CSV import is
+shown only when no Drive backup exists or the automatic restore cannot complete.
+Google access tokens are short-lived and memory-only; if the browser blocks the
+Google authorization popup during an automatic retry, use the Restore from
+Google Drive action in the fallback window.

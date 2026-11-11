@@ -23,7 +23,49 @@ export default function App() {
   const [showImportOnce,setShowImportOnce]=useState(false);
 
   useEffect(()=>{document.documentElement.classList.toggle('dark',dark);localStorage.setItem('vaultspend_dark',String(dark));},[dark]);
-  useEffect(()=>{if(!user)return;loadVault().then(v=>{setData(v);if(v.expenses.length===0)setImportOpen(true);}).catch(e=>setToast(e.message));},[user]);
+  useEffect(()=>{
+    if(!user)return;
+    let cancelled=false;
+    (async()=>{
+      try {
+        // Always inspect this browser's local vault first. Never replace a
+        // non-empty local vault with an older Drive backup.
+        const local=await loadVault();
+        if(cancelled)return;
+        if(local.expenses.length>0){setData(local);return;}
+
+        // Empty/missing local data means this may be a new device or cleared
+        // browser storage. Restore from Drive automatically before asking for Excel.
+        try {
+          const remote=await restoreFromDrive();
+          if(cancelled)return;
+          if(remote){
+            if(!Array.isArray(remote.expenses)||!Array.isArray(remote.categories)||!Array.isArray(remote.people)){
+              throw new Error('The Google Drive backup is not a valid VaultSpend backup.');
+            }
+            await saveVault(remote);
+            if(cancelled)return;
+            setData(remote);
+            setToast(`${remote.expenses.length} transactions restored from Google Drive.`);
+            return;
+          }
+          // No Drive backup exists: offer the original Excel/CSV import path.
+          setData(local);
+          setImportOpen(true);
+        } catch(driveError) {
+          if(cancelled)return;
+          // Keep the local vault intact and expose a manual retry if automatic
+          // token renewal was blocked or Drive could not be reached.
+          setData(local);
+          setImportOpen(true);
+          setToast(`Automatic Drive restore failed: ${driveError instanceof Error?driveError.message:'Unknown error'}. You can retry from the restore window.`);
+        }
+      } catch(e) {
+        if(!cancelled)setToast(e instanceof Error?e.message:'Could not load your local vault.');
+      }
+    })();
+    return()=>{cancelled=true;};
+  },[user]);
   useEffect(()=>{if(!data)return;const t=window.setTimeout(()=>saveVault(data).catch(e=>setToast(e.message)),250);return()=>window.clearTimeout(t);},[data]);
   useEffect(()=>{if(!toast)return;const t=window.setTimeout(()=>setToast(''),4500);return()=>window.clearTimeout(t);},[toast]);
 
