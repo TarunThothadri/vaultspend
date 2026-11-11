@@ -1,6 +1,6 @@
 # VaultSpend
 
-Offline-first, responsive React + TypeScript PWA expense tracker. The first login creates an empty local vault; users can import their own Excel/CSV transactions or add expenses manually.
+Offline-first, responsive React + TypeScript PWA expense tracker. The first login creates a local vault. If the local vault is empty, users can restore an existing Google Drive backup or import their own Excel/CSV transactions.
 
 ## Requirements
 - Node.js 20.19+ or 22.12+
@@ -42,7 +42,8 @@ The first worksheet is read. Required columns: `Date`, `Expense`; recommended co
 - Google OAuth access tokens are short-lived. Google does not provide a permanent browser login token. The app remembers the account profile locally, but a Drive operation after token expiry requires the user to sign in again. This is intentional; never store access tokens in localStorage.
 - `drive.file` is the narrow Drive scope. The app creates/finds its own `ExpenseTracker_Backup` folder and manages `expenses.json` there.
 - The app does not upload automatically. Backup runs only when the user clicks **Backup to Drive**.
-- Current backup implementation is a last-write-wins single-user backup. It does not perform multi-device conflict resolution or merge concurrent edits. Before using it as the only copy of important records, add versioning, download/restore UX, and conflict handling.
+- When the local vault is empty, the app offers **Restore from Google Drive**. This downloads the existing `expenses.json` backup and saves it into that device's encrypted IndexedDB vault. The restore action is user-initiated so Google can request a fresh short-lived access token when needed.
+- Existing non-empty local data is not automatically overwritten by a Drive backup. If both devices have changed independently, this version does not merge concurrent edits or resolve conflicts. Back up deliberately after making changes on each device; do not edit the same vault on multiple devices simultaneously until conflict resolution is implemented.
 - Service worker caches the app shell, not private transaction API responses. The app remains usable offline after the first successful load; Google sign-in and Drive backup require internet.
 - PWA installation requires HTTPS except on localhost. iOS: Share → Add to Home Screen. Android/desktop Chromium: use the install icon or browser menu.
 

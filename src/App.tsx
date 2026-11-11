@@ -6,7 +6,7 @@ import ExpenseModal from './components/ExpenseModal';
 import AddItemModal from './components/AddItemModal';
 import ImportPrompt from './components/ImportPrompt';
 import { loadVault, saveVault } from './lib/storage';
-import { backupToDrive, getSavedUser, signIn, signOutLocal } from './lib/googleDrive';
+import { backupToDrive, getSavedUser, restoreFromDrive, signIn, signOutLocal } from './lib/googleDrive';
 import type { Expense, GoogleUser, Timeframe, VaultData } from './types';
 
 export default function App() {
@@ -32,6 +32,19 @@ export default function App() {
   function addExpense(e:Expense){setData(d=>d?({...d,expenses:[e,...d.expenses],categories:d.categories.includes(e.Category)?d.categories:[...d.categories,e.Category],people:d.people.includes(e['For/With'])?d.people:[...d.people,e['For/With']] }):d);setExpenseOpen(false);setToast('Expense saved on this device.');}
   function addItem(v:string){setData(d=>d?({...d,categories:addType==='Category'?[...new Set([...d.categories,v])]:d.categories,people:addType==='For/With'?[...new Set([...d.people,v])]:d.people}):d);setAddType(null);setToast(`${addType} added.`);}
   function importRows(rows:Expense[]){setData(d=>d?({...d,expenses:[...rows,...d.expenses],categories:[...new Set([...d.categories,...rows.map(x=>x.Category)])],people:[...new Set([...d.people,...rows.map(x=>x['For/With'])])] }):d);setImportOpen(false);setToast(`${rows.length} transactions imported.`);}
+  async function restoreBackup():Promise<boolean>{
+    const restored=await restoreFromDrive();
+    if(!restored)return false;
+    if(!Array.isArray(restored.expenses)||!Array.isArray(restored.categories)||!Array.isArray(restored.people)){
+      throw new Error('The Google Drive backup is not a valid VaultSpend backup. Your local data was not changed.');
+    }
+    // This action is only offered while the local vault is empty, so it cannot overwrite local transactions.
+    await saveVault(restored);
+    setData(restored);
+    setImportOpen(false);
+    setToast(`${restored.expenses.length} transactions restored from Google Drive.`);
+    return true;
+  }
   if(!user)return <SignIn onSignIn={handleSignIn} busy={busy}/>;
   if(!data)return <div className="grid min-h-screen place-items-center text-slate-500">Loading your encrypted vault…</div>;
   return <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
@@ -44,7 +57,7 @@ export default function App() {
     {fabOpen&&<div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/50 p-4 sm:items-center"><div className="w-full max-w-sm rounded-3xl bg-white p-5 dark:bg-slate-900"><div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-bold">Add new</h2><button onClick={()=>setFabOpen(false)}><X/></button></div><div className="grid gap-2"><button onClick={()=>{setFabOpen(false);setExpenseOpen(true);}} className="rounded-xl bg-violet-600 p-4 text-left font-semibold text-white">＋ Expense <span className="block text-xs font-normal text-violet-100">Record a new transaction</span></button><button onClick={()=>{setFabOpen(false);setAddType('Category');}} className="rounded-xl border border-slate-200 p-4 text-left font-semibold dark:border-slate-700">＋ Category <span className="block text-xs font-normal text-slate-500">Create a spending category</span></button><button onClick={()=>{setFabOpen(false);setAddType('For/With');}} className="rounded-xl border border-slate-200 p-4 text-left font-semibold dark:border-slate-700">＋ For / With <span className="block text-xs font-normal text-slate-500">Add a person or group</span></button></div></div></div>}
     {expenseOpen&&<ExpenseModal categories={data.categories} people={data.people} onClose={()=>setExpenseOpen(false)} onSave={addExpense}/>}
     {addType&&<AddItemModal type={addType} onClose={()=>setAddType(null)} onSave={addItem}/>}
-    {importOpen&&<ImportPrompt onClose={()=>setImportOpen(false)} onImport={importRows}/>}
+    {importOpen&&<ImportPrompt onClose={()=>setImportOpen(false)} onImport={importRows} onRestore={restoreBackup}/>}
     {toast&&<div role="status" className="fixed bottom-24 left-1/2 z-[60] -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl">{toast}</div>}
   </div>;
 }
